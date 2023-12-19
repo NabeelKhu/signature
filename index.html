@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0"
+      charset="UTF-8"
+    />
+    <link rel="manifest" href="manifest.json" />
+    <link rel="shortcut icon" href="assets/favicon.png" type="image/x-icon" />
+    <link rel="stylesheet" href="styles/shared-style.css" />
+  </head>
+  <body>
+    <script>
+      if ("serviceWorker" in navigator) {
+        navigator.serviceWorker
+          .register("service-worker.js")
+          .then((registration) => {
+            console.log(
+              "Service Worker registered with scope:",
+              registration.scope
+            );
+          })
+          .catch((error) => {
+            console.error("Service Worker registration failed:", error);
+          });
+      }
+    </script>
+    <div id="header-bar">
+      <div class="dropdown" id="dropdown-div">
+        <div class="dropdown-head">
+          <span id="drop-down-title">Select device type</span>
+          <div class="caret"></div>
+        </div>
+      </div>
+      <deiv id="title-container">
+        <h1 id="title">Signature devices</h1>
+      </deiv>
+      <div id="theme">
+        <img id="theme-icon" src="assets/toggle-theme.png" alt="Theme Icon" />
+      </div>
+    </div>
+    <div class="wrapper-horizontal" id="device-space"></div>
+  </body>
+  <script src="https://cdn.socket.io/4.3.2/socket.io.min.js"></script>
+  <script type="module" src="controllers/main-controller.js"></script>
+</html>
