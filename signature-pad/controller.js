@@ -17,10 +17,12 @@ export class SignaturePadController extends BaseController {
     super();
     this.signaturePadDriver = null;
     // drawn shape boundaries
-    this.xStart = NaN;
-    this.xEnd = NaN;
-    this.yStart = NaN;
-    this.yEnd = NaN;
+    this.xStart = null;
+    this.xEnd = null;
+    this.yStart = null;
+    this.yEnd = null;
+
+    this.lineWidth = null;
   }
 
   /**
@@ -49,7 +51,26 @@ export class SignaturePadController extends BaseController {
       connectButton.disabled = true;
 
       this.signaturePadDriver = new SignaturePadDriver(this.drawOnCanvas);
-      await this.signaturePadDriver.connect(this.drawOnCanvas);
+      let configObj = await this.signaturePadDriver.connect(this.drawOnCanvas);
+      if (configObj == null) throw new Error("config object is null");
+
+      this.lineWidth = configObj.lineWidth;
+
+      let canvas = document.getElementById("canvas");
+      // css scale is 2:1 (width:height), it rescale it and add extra pixels if needed
+      // this will only effect the view (having empty space), the download image will stay the same
+      canvas.height = Math.ceil(Math.max(configObj.canvasWidth/(canvas.style.width/canvas.style.length), configObj.canvasHeight));
+      canvas.width = canvas.height*(canvas.style.width/canvas.style.length);
+
+      this.signaturePadDriver.open(
+        configObj.baudRate,
+        configObj.parity,
+        configObj.chunkSize,
+        configObj.validStartingByte,
+        configObj.decodeFunction,
+        this.drawOnCanvas
+      );
+
       connectButton.disabled = true;
       disconnectButton.disabled = false;
     } catch (error) {
@@ -100,28 +121,28 @@ export class SignaturePadController extends BaseController {
     this.yEnd = 0;
   };
 
-/**
- * draw on canvas, point or a line
- * @param {Number} x x starting point
- * @param {Number} y y ending point
- * @param {Boolean} drawLine if not true a point will be drawn otherwise a line
- * @param {Number} x2 x ending point (if draw line is not true it will be ignored)
- * @param {Number} y2 y ending point (if draw line is not true it will be ignored)
- */
+  /**
+   * draw on canvas, point or a line
+   * @param {Number} x x starting point
+   * @param {Number} y y ending point
+   * @param {Boolean} drawLine if not true a point will be drawn otherwise a line
+   * @param {Number} x2 x ending point (if draw line is not true it will be ignored)
+   * @param {Number} y2 y ending point (if draw line is not true it will be ignored)
+   */
   drawOnCanvas = (x, y, drawLine, x2, y2) => {
+    console.log("x is "+x +"y is "+y);
     let c = document.getElementById("canvas");
     let ctx = c.getContext("2d");
-
     // update shape boundaries
     this.xStart = Math.floor(Math.min(this.xStart, x));
     this.xEnd = Math.ceil(Math.max(this.xEnd, x));
     this.yStart = Math.floor(Math.min(this.yStart, y));
     this.yEnd = Math.ceil(Math.max(this.yEnd, y));
 
-    if (drawLine == false) {
-      ctx.fillRect(x, y, 4, 4);
-    } else if (drawLine == true) {
-      ctx.lineWidth = 4;
+    if (!drawLine) {
+      ctx.fillRect(x, y, this.lineWidth, this.lineWidth);
+    } else {
+      ctx.lineWidth = this.lineWidth;
       ctx.beginPath();
       ctx.moveTo(x, y);
       ctx.lineTo(x2, y2);

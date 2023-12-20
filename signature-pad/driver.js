@@ -1,10 +1,22 @@
 import { BaseDriver } from "../drivers/base-driver.js";
+import { configList } from "./config-list.js";
 
 export class SignaturePadDriver extends BaseDriver {
-  constructor(drawFunction) {
+  constructor() {
     super();
     // a call back function that will be used after processing the data
-    this.drawFunction = drawFunction;
+    this.drawFunction = null;
+
+    this.parity = null;
+
+    this.baudRate = null;
+
+    this.chunkSize = null;
+
+    this.validStartingByte = null;
+
+    this.decodeFunction = null;
+
     // web serial port object (device)
     this.port = null;
     // a buffer for data recived but not processed yet
@@ -18,8 +30,8 @@ export class SignaturePadDriver extends BaseDriver {
 
     // store last point drawn information
     this.lastCallTime = null;
-    this.lastX = NaN;
-    this.lastY = NaN;
+    this.lastX = null;
+    this.lastY = null;
   }
 
   /**
@@ -29,8 +41,34 @@ export class SignaturePadDriver extends BaseDriver {
     // request the user to select a device (it will give permission to interact with the device)
     this.port = await navigator.serial.requestPort();
 
+    let vid = this.port.getInfo().usbVendorId;
+    let pid = this.port.getInfo().usbProductId;
+
+    let i = 0;
+    for (; i < configList.length; i++) {
+      if (configList[i].filter(vid, pid)) break;
+    }
+    if (i >= configList.length) return null;
+    return configList[i];
+  };
+
+  open = async (
+    baudRate,
+    parity,
+    chunkSize,
+    validStartingByte,
+    decodeFunction,
+    drawFunction
+  ) => {
+    this.baudRate = baudRate;
+    this.parity = parity;
+    this.chunkSize = chunkSize;
+    this.validStartingByte = validStartingByte;
+    this.decodeFunction = decodeFunction;
+    this.drawFunction = drawFunction;
+
     // open a connection with that device
-    await this.port.open({ baudRate: 19200, parity: "odd" });
+    await this.port.open({ baudRate: this.baudRate, parity: this.parity });
 
     this.keepReading = true;
 
@@ -83,31 +121,38 @@ export class SignaturePadDriver extends BaseDriver {
     this.bytesArray.push(...data);
 
     // while the bytesArray have over 5 elements (chunk size is 5) it keep processing data in it
-    while (this.bytesArray.length > 5) {
+    while (this.bytesArray.length >= this.chunkSize) {
       // if first byte isn't 0xc1 (which mean pen down and a point is drawn) don't draw
-      if (193 != this.bytesArray[0]) {
+      if (
+        this.validStartingByte !== null &&
+        this.validStartingByte != this.bytesArray[0]
+      ) {
         this.lastCallTime = null;
-        this.lastX = NaN;
-        this.lastY = NaN;
-        this.bytesArray.splice(0, 5);
+        this.lastX = null;
+        this.lastY = null;
+        this.bytesArray.splice(0, this.chunkSize);
         continue;
       }
-      // decode and calculate x and y, they are reprsented from bytes 2-5
-      let x = 0;
-      x += this.bytesArray[1];
-      x += 16 * 8 * this.bytesArray[2];
-      let y = 0;
-      y += this.bytesArray[3];
-      y += 16 * 8 * this.bytesArray[4];
+      let decodedObj = null;
+      if (this.validStartingByte === null)
+        decodedObj = this.decodeFunction(
+          this.bytesArray.slice(0, this.chunkSize)
+        );
+      else
+        decodedObj = this.decodeFunction(
+          this.bytesArray.slice(1, this.chunkSize)
+        );
+      let x = decodedObj.x;
+      let y = decodedObj.y;
       // remove the decoded bytes from the array
-      this.bytesArray.splice(0, 5);
-      if (drawLine == true) {
+      this.bytesArray.splice(0, this.chunkSize);
+      if (drawLine == true && this.lastX !=null && this.lastY!=null) {
         this.drawFunction(x, y, true, this.lastX, this.lastY);
-        this.lastX = x;
-        this.lastY = y;
       } else this.drawFunction(x, y);
+      this.lastX = x;
+      this.lastY = y;
     }
-    if (this.lastX != NaN && this.lastY != NaN) this.lastCallTime = timeCalled;
+    if (this.lastX != null && this.lastY != null) this.lastCallTime = timeCalled;
   };
 
   /**
