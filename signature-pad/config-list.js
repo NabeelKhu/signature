@@ -9,8 +9,8 @@ const configList = [
     chunkSize: 5,
     validStartingByte: 0xc1,
 
-    lineWidth: 3,
-    canvasWidth: 2290 - 500,
+    lineWidth: 4,
+    canvasWidth: 2280 - 500,
     canvasHeight: 975 - 450,
 
     decodeFunction: (bytes) => {
@@ -60,3 +60,22 @@ const configList = [
 ];
 
 export { configList };
+
+/*
+template object:
+{
+  filter: (vid, pid) => { return false;},
+
+  baudRate: 19200,
+  parity: "odd",
+  chunkSize: 4,
+  validStartingByte: null,
+
+  lineWidth: 1,
+  canvasWidth: 512,
+  canvasHeight: 256,
+
+  decodeFunction: (bytes) => { return {x:1, y:1};},
+}
+*/
+

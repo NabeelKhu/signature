@@ -59,8 +59,8 @@ export class SignaturePadController extends BaseController {
       let canvas = document.getElementById("canvas");
       // css scale is 2:1 (width:height), it rescale it and add extra pixels if needed
       // this will only effect the view (having empty space), the download image will stay the same
-      canvas.height = Math.ceil(Math.max(configObj.canvasWidth/(canvas.style.width/canvas.style.length), configObj.canvasHeight));
-      canvas.width = canvas.height*(canvas.style.width/canvas.style.length);
+      canvas.height = Math.ceil( Math.max(configObj.canvasWidth/2 , configObj.canvasHeight));
+      canvas.width = canvas.height *2;
 
       this.signaturePadDriver.open(
         configObj.baudRate,
@@ -130,7 +130,6 @@ export class SignaturePadController extends BaseController {
    * @param {Number} y2 y ending point (if draw line is not true it will be ignored)
    */
   drawOnCanvas = (x, y, drawLine, x2, y2) => {
-    console.log("x is "+x +"y is "+y);
     let c = document.getElementById("canvas");
     let ctx = c.getContext("2d");
     // update shape boundaries

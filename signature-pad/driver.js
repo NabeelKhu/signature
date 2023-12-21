@@ -68,7 +68,7 @@ export class SignaturePadDriver extends BaseDriver {
     this.drawFunction = drawFunction;
 
     // open a connection with that device
-    await this.port.open({ baudRate: this.baudRate, parity: this.parity });
+    await this.port.open({ baudRate: this.baudRate, parity: this.parity, bufferSize: 16777216 });
 
     this.keepReading = true;
 
