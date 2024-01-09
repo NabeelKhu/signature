@@ -7,7 +7,7 @@ export const mainView = (function () {
   let darkThemeSelected_ = false;
 
   /**
-   * Responsible for loading the supported devices in a dropdown list.
+   * Responsible for loading the supported devices in a dropdown list and cards
    *
    * @param {Function} showDevice The callback function to be executed
    */

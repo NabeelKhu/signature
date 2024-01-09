@@ -1,20 +1,21 @@
 import { BaseDriver } from "../drivers/base-driver.js";
-import { configList } from "./config-list.js";
 
 export class SignaturePadDriver extends BaseDriver {
   constructor() {
     super();
     // a call back function that will be used after processing the data
-    this.drawFunction = null;
+    this.callbackFunction = null;
 
+    // parity for the device "none", "odd" or "even"
     this.parity = null;
 
+    // baudRate for the device
     this.baudRate = null;
 
+    // number of bytes that represent each point
     this.chunkSize = null;
 
-    this.validStartingByte = null;
-
+    // decoding function to get x and y
     this.decodeFunction = null;
 
     // web serial port object (device)
@@ -35,7 +36,8 @@ export class SignaturePadDriver extends BaseDriver {
   }
 
   /**
-   * connect to a device using web serial port and start reading from it
+   * request a device from the user, return it's pid and vid
+   * @returns {{vid: Number, pid: Number}}
    */
   connect = async () => {
     // request the user to select a device (it will give permission to interact with the device)
@@ -43,32 +45,53 @@ export class SignaturePadDriver extends BaseDriver {
 
     let vid = this.port.getInfo().usbVendorId;
     let pid = this.port.getInfo().usbProductId;
-
-    let i = 0;
-    for (; i < configList.length; i++) {
-      if (configList[i].filter(vid, pid)) break;
-    }
-    if (i >= configList.length) return null;
-    return configList[i];
+    return { vid: vid, pid: pid };
   };
 
-  open = async (
-    baudRate,
-    parity,
-    chunkSize,
-    validStartingByte,
-    decodeFunction,
-    drawFunction
-  ) => {
-    this.baudRate = baudRate;
-    this.parity = parity;
-    this.chunkSize = chunkSize;
-    this.validStartingByte = validStartingByte;
-    this.decodeFunction = decodeFunction;
-    this.drawFunction = drawFunction;
+  /**
+   * open the port and start reading from it
+   * @param {Number} baudRate
+   * @param {String} parity
+   * @param {Number} chunkSize
+   * @param {Function} decodeFunction
+   * @param {Function} callbackFunction
+   */
+  open = async (options = {}) => {
+    let _decodeFunction = (bytes) => {
+      // bytes length is 5, first byte is 0xc1 when the pen in drawing on the pad, anything other than it will be invalid
+      if (bytes[0] != 0xc1) return { x: null, y: null, invalid: true };
+  
+      // 2ed and 3ed bytes are for x and 4th and 5th bytes are for y
+      let x = 0;
+      x += bytes[1];
+      x += 128 * bytes[2]; //left most bit of 2ed byte is a sign byte (always 0), so 3ed byte weight is 2^7
+      let y = 0;
+      y += bytes[3];
+      y += 128 * bytes[4]; //left most bit of 4ed byte is a sign byte (always 0), so 5th byte weight is 2^7
+      return { x: x, y: y };
+    };
+
+    let defaultOptions = {
+      baudRate: 19200,
+      parity: "odd",
+      chunkSize: 5,
+      decodeFunction: _decodeFunction,
+      callbackFunction: null,
+    };
+
+    options = { ...defaultOptions, ...options };
+    this.baudRate = options.baudRate;
+    this.parity = options.parity;
+    this.chunkSize = options.chunkSize;
+    this.decodeFunction = options.decodeFunction;
+    this.callbackFunction = options.callbackFunction;
 
     // open a connection with that device
-    await this.port.open({ baudRate: this.baudRate, parity: this.parity, bufferSize: 16777216 });
+    await this.port.open({
+      baudRate: this.baudRate,
+      parity: this.parity,
+      bufferSize: 16777216,
+    });
 
     this.keepReading = true;
 
@@ -103,6 +126,8 @@ export class SignaturePadDriver extends BaseDriver {
     }, 50);
   };
 
+  
+
   /**
    * function is called when new data come from device
    * it decode and draw the data on canvas
@@ -122,37 +147,28 @@ export class SignaturePadDriver extends BaseDriver {
 
     // while the bytesArray have over 5 elements (chunk size is 5) it keep processing data in it
     while (this.bytesArray.length >= this.chunkSize) {
-      // if first byte isn't 0xc1 (which mean pen down and a point is drawn) don't draw
-      if (
-        this.validStartingByte !== null &&
-        this.validStartingByte != this.bytesArray[0]
-      ) {
-        this.lastCallTime = null;
+      let decodedObj = null;
+      decodedObj = this.decodeFunction(
+        this.bytesArray.slice(0, this.chunkSize)
+      );
+      if ("invalid" in decodedObj && decodedObj.invalid === true) {
         this.lastX = null;
         this.lastY = null;
         this.bytesArray.splice(0, this.chunkSize);
         continue;
       }
-      let decodedObj = null;
-      if (this.validStartingByte === null)
-        decodedObj = this.decodeFunction(
-          this.bytesArray.slice(0, this.chunkSize)
-        );
-      else
-        decodedObj = this.decodeFunction(
-          this.bytesArray.slice(1, this.chunkSize)
-        );
       let x = decodedObj.x;
       let y = decodedObj.y;
       // remove the decoded bytes from the array
       this.bytesArray.splice(0, this.chunkSize);
-      if (drawLine == true && this.lastX !=null && this.lastY!=null) {
-        this.drawFunction(x, y, true, this.lastX, this.lastY);
-      } else this.drawFunction(x, y);
+      if (drawLine === true && this.lastX !== null && this.lastY !== null) {
+        this.callbackFunction(x, y, this.lastX, this.lastY);
+      } else this.callbackFunction(x, y, x, y);
       this.lastX = x;
       this.lastY = y;
     }
-    if (this.lastX != null && this.lastY != null) this.lastCallTime = timeCalled;
+    if (this.lastX !== null && this.lastY !== null)
+      this.lastCallTime = timeCalled;
   };
 
   /**

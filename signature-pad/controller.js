@@ -1,6 +1,7 @@
 import { signaturePadView } from "./view.js";
 import { SignaturePadDriver } from "./driver.js";
 import { BaseController } from "../controllers/base-controller.js";
+import { profiles } from "./profiles/profile-list.js";
 
 export class SignaturePadController extends BaseController {
   static instance;
@@ -16,7 +17,8 @@ export class SignaturePadController extends BaseController {
   constructor() {
     super();
     this.signaturePadDriver = null;
-    // drawn shape boundaries
+
+    // drawn shape boundaries, used for downloading the image
     this.xStart = null;
     this.xEnd = null;
     this.yStart = null;
@@ -40,45 +42,50 @@ export class SignaturePadController extends BaseController {
   };
 
   /**
-   * connect to the device
+   * connect and open serial port
+   * it call connect function from the driver to request a device
+   * search for profile for that device and load it's parameters
+   * then open the port and start reading on it
    */
   connect = async () => {
-    let connectButton = document.getElementById("connect-button");
-    let disconnectButton = document.getElementById("disconnect-button");
-    let connectInner = connectButton.innerHTML;
+    let connectInner = signaturePadView.connect("connecting ...");
     try {
-      connectButton.innerHTML = "connecting ...";
-      connectButton.disabled = true;
-
       this.signaturePadDriver = new SignaturePadDriver(this.drawOnCanvas);
-      let configObj = await this.signaturePadDriver.connect(this.drawOnCanvas);
-      if (configObj == null) throw new Error("config object is null");
-
-      this.lineWidth = configObj.lineWidth;
-
-      let canvas = document.getElementById("canvas");
-      // css scale is 2:1 (width:height), it rescale it and add extra pixels if needed
-      // this will only effect the view (having empty space), the download image will stay the same
-      canvas.height = Math.ceil( Math.max(configObj.canvasWidth/2 , configObj.canvasHeight));
-      canvas.width = canvas.height *2;
-
-      this.signaturePadDriver.open(
-        configObj.baudRate,
-        configObj.parity,
-        configObj.chunkSize,
-        configObj.validStartingByte,
-        configObj.decodeFunction,
+      let deviceNumber = await this.signaturePadDriver.connect(
         this.drawOnCanvas
       );
 
-      connectButton.disabled = true;
-      disconnectButton.disabled = false;
+      // search for a suitable profile using filter function
+      let i = 0;
+      for (; i < profiles.length; i++) {
+        if (profiles[i].PROFILE.filter(deviceNumber.vid, deviceNumber.pid))
+          break;
+      }
+      if (i >= profiles.length) throw new Error("Couldn't find profile to use!");
+      let profile = profiles[i].PROFILE;
+
+      this.lineWidth = profile.lineWidth;
+
+      // css scale is 2:1 (width:height), it rescale it and add extra pixels if needed
+      // this will only effect the view (having empty space), the download image will stay the same
+      signaturePadView.updateCanvasSize(
+        profile.canvasWidth,
+        profile.canvasHeight
+      );
+
+      this.signaturePadDriver.open({
+        baudRate: profile.baudRate,
+        parity: profile.parity,
+        chunkSize: profile.chunkSize,
+        decodeFunction: profile.decodeFunction,
+        callbackFunction: this.drawOnCanvas,
+      });
+      signaturePadView.enableDisconnectButton();
     } catch (error) {
       console.error(error);
-      connectButton.disabled = false;
-      disconnectButton.disabled = true;
+      signaturePadView.enableConnectButton();
     } finally {
-      connectButton.innerHTML = connectInner;
+      signaturePadView.setConnectButtonInner(connectInner);
     }
   };
 
@@ -86,25 +93,18 @@ export class SignaturePadController extends BaseController {
    * disconnect from the device
    */
   disconnect = async () => {
-    let connectButton = document.getElementById("connect-button");
-    let disconnectButton = document.getElementById("disconnect-button");
-    let disconnectInner = disconnectButton.innerHTML;
+    let disconnectInner = signaturePadView.disconnect("disconnecting ...");
     try {
-      disconnectButton.innerHTML = "disconnecting ...";
-      disconnectButton.disabled = true;
-
       if (this.signaturePadDriver !== null) {
         await this.signaturePadDriver.disconnect();
       }
-      connectButton.disabled = false;
-      disconnectButton.disabled = true;
+      signaturePadView.enableConnectButton();
     } catch (error) {
       console.error(error);
-      connectButton.disabled = true;
-      disconnectButton.disabled = false;
+      signaturePadView.enableDisconnectButton();
       this.signaturePadDriver = null;
     } finally {
-      disconnectButton.innerHTML = disconnectInner;
+      signaturePadView.setDisconnectButtonInner(disconnectInner);
     }
   };
 
@@ -112,9 +112,7 @@ export class SignaturePadController extends BaseController {
    * clear the the canvas, and x, y boundaries
    */
   clearCanvas = () => {
-    let canvas = document.getElementById("canvas");
-    let context = canvas.getContext("2d");
-    context.clearRect(0, 0, canvas.width, canvas.height);
+    signaturePadView.clearCanvas();
     this.xStart = canvas.width;
     this.xEnd = 0;
     this.yStart = canvas.height;
@@ -124,75 +122,54 @@ export class SignaturePadController extends BaseController {
   /**
    * draw on canvas, point or a line
    * @param {Number} x x starting point
-   * @param {Number} y y ending point
+   * @param {Number} y y starting point
    * @param {Boolean} drawLine if not true a point will be drawn otherwise a line
    * @param {Number} x2 x ending point (if draw line is not true it will be ignored)
    * @param {Number} y2 y ending point (if draw line is not true it will be ignored)
    */
-  drawOnCanvas = (x, y, drawLine, x2, y2) => {
-    let c = document.getElementById("canvas");
-    let ctx = c.getContext("2d");
+  drawOnCanvas = (x, y, x2, y2) => {
     // update shape boundaries
-    this.xStart = Math.floor(Math.min(this.xStart, x));
-    this.xEnd = Math.ceil(Math.max(this.xEnd, x));
-    this.yStart = Math.floor(Math.min(this.yStart, y));
-    this.yEnd = Math.ceil(Math.max(this.yEnd, y));
-
-    if (!drawLine) {
-      ctx.fillRect(x, y, this.lineWidth, this.lineWidth);
-    } else {
-      ctx.lineWidth = this.lineWidth;
-      ctx.beginPath();
-      ctx.moveTo(x, y);
-      ctx.lineTo(x2, y2);
-      ctx.stroke();
-    }
+    let distance = Math.ceil(this.lineWidth / 2); // the distance of the most far pixel from the center of the line/point
+    this.xStart = Math.max(
+      Math.floor(Math.min(x + distance, x - distance, this.xStart)),
+      0
+    );
+    this.xEnd = Math.min(
+      Math.ceil(Math.max(x + distance, x - distance, this.xEnd)),
+      canvas.width
+    );
+    this.yStart = Math.max(
+      Math.floor(Math.min(y + distance, y - distance, this.yStart)),
+      0
+    );
+    this.yEnd = Math.min(
+      Math.ceil(Math.max(y + distance, y - distance, this.yEnd)),
+      canvas.height
+    );
+    signaturePadView.canvasDrawLine(this.lineWidth, x, y, x2, y2);
   };
 
   /**
    * download signature as image
    */
   downloadImage = () => {
-    let canvas = document.getElementById("canvas");
-    // make new canvas
-    let rectangleCanvas = document.createElement("canvas");
-    let rectangleContext = rectangleCanvas.getContext("2d");
-    let width = this.xEnd - this.xStart + 1;
-    let height = this.yEnd - this.yStart + 1;
-    rectangleCanvas.width = width;
-    rectangleCanvas.height = height;
-
-    //copy the drawn part from old canvas to the new one
-    rectangleContext.drawImage(
-      canvas,
+    signaturePadView.downloadImage(
       this.xStart,
       this.yStart,
-      width,
-      height,
-      0,
-      0,
-      width,
-      height
+      this.xEnd,
+      this.yEnd
     );
-    // set a link and download it
-    let dataUrl = rectangleCanvas.toDataURL("image/png");
-    let link = document.createElement("a");
-    link.href = dataUrl;
-    link.download = "signature.png";
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
   };
 
   /**
    * controller end:
-   *      disconnect from device
-   *      clean the canvas
-   *      remove html that the controller add
+   * disconnect from device
+   * clean the canvas
+   * remove html that the controller add
    */
   destroy = async () => {
     this.disconnect();
     this.clearCanvas();
-    document.getElementById("device-space").innerHTML = "";
+    signaturePadView.clearDviceSpace();
   };
 }
