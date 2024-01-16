@@ -1,5 +1,7 @@
 import { SignaturePadController } from "../signature-pad/controller.js";
 import { ToapzDeisplayController } from "../topaz-display/controller.js";
+import { SignaturePadNodeSerialDriver } from "../drivers/signature-pad-node-serial-driver.js";
+import { SignaturePadWebSerialDriver } from "../drivers/signature-pad-web-serial-driver.js";
 
 /**
  * @fileoverview This file contains the list of signature devices supported
@@ -13,8 +15,13 @@ import { ToapzDeisplayController } from "../topaz-display/controller.js";
  */
 export const signatureDevices = [
   Object.freeze({
-    LABEL: "Signature pad",
-    CONTROLLER: SignaturePadController.getInstance(),
+    LABEL: "Signature pad Node Serial",
+    CONTROLLER: new SignaturePadController(SignaturePadNodeSerialDriver),
+  }),
+
+  Object.freeze({
+    LABEL: "Signature pad Web Serial",
+    CONTROLLER: new SignaturePadController(SignaturePadWebSerialDriver),
   }),
 
   Object.freeze({

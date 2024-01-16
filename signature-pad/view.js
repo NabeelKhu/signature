@@ -131,6 +131,8 @@ export const signaturePadView = (function () {
     let ctx = c.getContext("2d");
     ctx.lineWidth = lineWidth;
     ctx.beginPath();
+    if(x == x2) x2+=1;
+    if(y==y2) y2+=1;
     ctx.moveTo(x, y);
     ctx.lineTo(x2, y2);
     ctx.stroke();
