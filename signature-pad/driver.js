@@ -33,6 +33,20 @@ export class SignaturePadDriver extends BaseDriver {
     this.lastCallTime = null;
     this.lastX = null;
     this.lastY = null;
+
+    this._decodeFunction = (bytes) => {
+      // bytes length is 5, first byte is 0xc1 when the pen in drawing on the pad, anything other than it will be invalid
+      if (bytes[0] != 0xc1) return { x: null, y: null, invalid: true };
+  
+      // 2ed and 3ed bytes are for x and 4th and 5th bytes are for y
+      let x = 0;
+      x += bytes[1];
+      x += 128 * bytes[2]; //left most bit of 2ed byte is a sign byte (always 0), so 3ed byte weight is 2^7
+      let y = 0;
+      y += bytes[3];
+      y += 128 * bytes[4]; //left most bit of 4ed byte is a sign byte (always 0), so 5th byte weight is 2^7
+      return { x: x, y: y };
+    };
   }
 
   /**
@@ -47,6 +61,8 @@ export class SignaturePadDriver extends BaseDriver {
     let pid = this.port.getInfo().usbProductId;
     return { vid: vid, pid: pid };
   };
+
+  
 
   /**
    * open the port and start reading from it
