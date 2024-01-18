@@ -57,25 +57,11 @@ export class SignaturePadDriver extends BaseDriver {
    * @param {Function} callbackFunction
    */
   open = async (options = {}) => {
-    let _decodeFunction = (bytes) => {
-      // bytes length is 5, first byte is 0xc1 when the pen in drawing on the pad, anything other than it will be invalid
-      if (bytes[0] != 0xc1) return { x: null, y: null, invalid: true };
-  
-      // 2ed and 3ed bytes are for x and 4th and 5th bytes are for y
-      let x = 0;
-      x += bytes[1];
-      x += 128 * bytes[2]; //left most bit of 2ed byte is a sign byte (always 0), so 3ed byte weight is 2^7
-      let y = 0;
-      y += bytes[3];
-      y += 128 * bytes[4]; //left most bit of 4ed byte is a sign byte (always 0), so 5th byte weight is 2^7
-      return { x: x, y: y };
-    };
-
     let defaultOptions = {
       baudRate: 19200,
       parity: "odd",
       chunkSize: 5,
-      decodeFunction: _decodeFunction,
+      decodeFunction: this._decodeFunction,
       callbackFunction: null,
     };
 
@@ -86,47 +72,41 @@ export class SignaturePadDriver extends BaseDriver {
     this.decodeFunction = options.decodeFunction;
     this.callbackFunction = options.callbackFunction;
 
-    // open a connection with that device
-    await this.port.open({
-      baudRate: this.baudRate,
-      parity: this.parity,
-      bufferSize: 16777216,
-    });
+    fetch("http://localhost:3000/stream")
+      .then((response) => {
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder("utf-8");
 
-    this.keepReading = true;
+        const read = () => {
+          reader
+            .read()
+            .then(({ value, done }) => {
+              if (done) {
+                console.log("Streaming finished!");
+                return;
+              }
 
-    // read function, constantly read data (using await) until keepreading is false
-    let read = async () => {
-      this.reader = await this.port.readable.getReader();
-      while (this.port.readable && this.keepReading) {
-        try {
-          // reader will return done if reader.cancel() used and it will break the loop
-          while (true) {
-            const { value, done } = await this.reader.read();
-            if (done) {
-              break;
-            }
-            // call process and give data and the current time
-            this.process(value, new Date().getTime());
-          }
-        } catch (error) {
-          console.error(error);
-          break;
-        } finally {
-          await this.reader.releaseLock();
-        }
-      }
-    };
-    this.reading = read();
+              // const decodedValue = decoder.decode(value, { stream: true });
 
-    // reset bytes array after 0.05s, this will clear corrupted data
-    // sometimes when reconnecting to the device some old bytes were stuck in the buffer
-    setTimeout(() => {
-      this.bytesArray = [];
-    }, 50);
+              // console.log(decodedValue);
+              console.log(value);
+              this.processCounter += 1;
+              console.log("process Counter", this.processCounter);
+              this.process(value, new Date().getTime());
+
+              read(); // Continue reading data
+            })
+            .catch((error) => {
+              console.error("Error reading stream:", error);
+            });
+        };
+
+        read(); // Start reading data
+      })
+      .catch((error) => {
+        console.error("Error fetching stream:", error);
+      });
   };
-
-  
 
   /**
    * function is called when new data come from device
@@ -135,22 +115,42 @@ export class SignaturePadDriver extends BaseDriver {
    * @param {Number} timeCalled time when function called in ms
    */
   process = (data, timeCalled) => {
-    // data is recieved as bytes representing points on the pad
-    // device send limited number of points/s wich is around 120 times/s
-    // to fix having gaps between points when user draw a line constantly it check the last time user draw
-    // if it was less than 30ms ago it connect that 2 points with a line
+    let isFirst = true;
+
     let drawLine = false;
-    if (this.lastCallTime != null && this.lastCallTime + 30 > timeCalled)
-      drawLine = true;
 
     this.bytesArray.push(...data);
+    if (this.lastCallTime != null && this.lastCallTime + 300 > timeCalled)
+      drawLine = true;
 
-    // while the bytesArray have over 5 elements (chunk size is 5) it keep processing data in it
     while (this.bytesArray.length >= this.chunkSize) {
+      if(isFirst){
+        isFirst = false;
+        drawLine = true;
+      }
+      console.log("process Counter", this.processCounter);
+      while (this.bytesArray.length > 0 && this.bytesArray[0] != 193) {
+        if (this.bytesArray[0] == 192) {
+          this.bytesArray.splice(0, 5);
+          drawLine = false;
+          continue;
+        }
+        this.bytesArray.splice(0, 1);
+        this.numberOfSkipps += 1;
+        drawLine = false;
+      }
+      this.numberOfPoints += 1;
+      console.log("number of points is ", this.numberOfPoints);
+      console.log("number of skips is ", this.numberOfSkipps);
+      if (this.bytesArray.length < 5) continue;
+      console.log(this.bytesArray);
       let decodedObj = null;
       decodedObj = this.decodeFunction(
         this.bytesArray.slice(0, this.chunkSize)
       );
+      console.log("process 1111", this.bytesArray.slice(0, this.chunkSize));
+      console.log("process 2222", decodedObj);
+
       if ("invalid" in decodedObj && decodedObj.invalid === true) {
         this.lastX = null;
         this.lastY = null;
