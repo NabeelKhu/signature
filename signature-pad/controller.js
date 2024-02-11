@@ -1,5 +1,5 @@
 import { signaturePadView } from "./view.js";
-import { SignaturePadDriver } from "./driver.js";
+import { SignaturePadDriver } from "../drivers/signature-pad-driver.js";
 import { BaseController } from "../controllers/base-controller.js";
 import { profiles } from "./profiles/profile-list.js";
 
@@ -49,30 +49,42 @@ export class SignaturePadController extends BaseController {
    */
   connect = async () => {
     let connectInner = signaturePadView.connect("connecting ...");
+    this.signaturePadDriver = new SignaturePadDriver(this.drawOnCanvas);
+    let deviceNumber = undefined;
     try {
-      this.signaturePadDriver = new SignaturePadDriver(this.drawOnCanvas);
-      let deviceNumber = await this.signaturePadDriver.connect(
-        this.drawOnCanvas
+      deviceNumber = await this.signaturePadDriver.connect(this.drawOnCanvas);
+    } catch (error) {
+      //usually enter if user didn't select any device
+      console.error(error);
+      signaturePadView.setConnectButtonInner(connectInner);
+      signaturePadView.enableConnectButton();
+      return;
+    }
+    // search for a suitable profile using filter function
+    let i = 0;
+    for (; i < profiles.length; i++) {
+      if (profiles[i].PROFILE.filter(deviceNumber.vid, deviceNumber.pid)) break;
+    }
+    if (i >= profiles.length) {
+      alert(
+        "Couldn't find suitable profile for that device! device could be not supported"
       );
+      signaturePadView.setConnectButtonInner(connectInner);
+      signaturePadView.enableConnectButton();
+      return;
+    }
+    let profile = profiles[i].PROFILE;
 
-      // search for a suitable profile using filter function
-      let i = 0;
-      for (; i < profiles.length; i++) {
-        if (profiles[i].PROFILE.filter(deviceNumber.vid, deviceNumber.pid))
-          break;
-      }
-      if (i >= profiles.length) throw new Error("Couldn't find profile to use!");
-      let profile = profiles[i].PROFILE;
+    this.lineWidth = profile.lineWidth;
 
-      this.lineWidth = profile.lineWidth;
+    // css scale is 2:1 (width:height), it rescale it and add extra pixels if needed
+    // this will only effect the view (having empty space), the download image will stay the same
+    signaturePadView.updateCanvasSize(
+      profile.canvasWidth,
+      profile.canvasHeight
+    );
 
-      // css scale is 2:1 (width:height), it rescale it and add extra pixels if needed
-      // this will only effect the view (having empty space), the download image will stay the same
-      signaturePadView.updateCanvasSize(
-        profile.canvasWidth,
-        profile.canvasHeight
-      );
-
+    try {
       this.signaturePadDriver.open({
         baudRate: profile.baudRate,
         parity: profile.parity,
@@ -80,13 +92,13 @@ export class SignaturePadController extends BaseController {
         decodeFunction: profile.decodeFunction,
         callbackFunction: this.drawOnCanvas,
       });
-      signaturePadView.enableDisconnectButton();
     } catch (error) {
       console.error(error);
-      signaturePadView.enableConnectButton();
-    } finally {
       signaturePadView.setConnectButtonInner(connectInner);
+      signaturePadView.enableConnectButton();
+      return;
     }
+    signaturePadView.enableDisconnectButton();
   };
 
   /**
@@ -94,18 +106,21 @@ export class SignaturePadController extends BaseController {
    */
   disconnect = async () => {
     let disconnectInner = signaturePadView.disconnect("disconnecting ...");
-    try {
-      if (this.signaturePadDriver !== null) {
-        await this.signaturePadDriver.disconnect();
-      }
+    if (this.signaturePadDriver == null) {
       signaturePadView.enableConnectButton();
-    } catch (error) {
-      console.error(error);
-      signaturePadView.enableDisconnectButton();
-      this.signaturePadDriver = null;
-    } finally {
       signaturePadView.setDisconnectButtonInner(disconnectInner);
     }
+    try {
+      await this.signaturePadDriver.disconnect();
+    } catch (error) {
+      console.warn(
+        "Warning: Normal flow has been disrupted. A forceful disconnect is being applied, but some cleanup may not work correctly. Please take note of any unexpected behavior."
+      );
+      console.error(error);
+    }
+    this.signaturePadDriver = null;
+    signaturePadView.setDisconnectButtonInner(disconnectInner);
+    signaturePadView.enableConnectButton();
   };
 
   /**
@@ -161,12 +176,6 @@ export class SignaturePadController extends BaseController {
     );
   };
 
-  /**
-   * controller end:
-   * disconnect from device
-   * clean the canvas
-   * remove html that the controller add
-   */
   destroy = async () => {
     this.disconnect();
     this.clearCanvas();

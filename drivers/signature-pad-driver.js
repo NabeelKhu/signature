@@ -1,28 +1,19 @@
-import { BaseDriver } from "../drivers/base-driver.js";
+import { BaseDriver } from "./base-driver.js";
 
 export class SignaturePadDriver extends BaseDriver {
   constructor() {
     super();
-    // a call back function that will be used after processing the data
     this.callbackFunction = null;
-
-    // parity for the device "none", "odd" or "even"
     this.parity = null;
-
-    // baudRate for the device
     this.baudRate = null;
 
     // number of bytes that represent each point
     this.chunkSize = null;
-
-    // decoding function to get x and y
     this.decodeFunction = null;
-
-    // web serial port object (device)
     this.port = null;
-    // a buffer for data recived but not processed yet
     this.bytesArray = [];
-    // async read function that got called (it get store so await can be used on it later)
+
+    // async read function that get called (it get store so await can be used on it later)
     this.reading = null;
     // Boolean to stop read function from reading more data
     this.keepReading = false;
@@ -60,7 +51,7 @@ export class SignaturePadDriver extends BaseDriver {
     let _decodeFunction = (bytes) => {
       // bytes length is 5, first byte is 0xc1 when the pen in drawing on the pad, anything other than it will be invalid
       if (bytes[0] != 0xc1) return { x: null, y: null, invalid: true };
-  
+
       // 2ed and 3ed bytes are for x and 4th and 5th bytes are for y
       let x = 0;
       x += bytes[1];
@@ -76,7 +67,7 @@ export class SignaturePadDriver extends BaseDriver {
       parity: "odd",
       chunkSize: 5,
       decodeFunction: _decodeFunction,
-      callbackFunction: null,
+      callbackFunction: ()=>{},
     };
 
     options = { ...defaultOptions, ...options };
@@ -84,7 +75,6 @@ export class SignaturePadDriver extends BaseDriver {
     this.parity = options.parity;
     this.chunkSize = options.chunkSize;
     this.decodeFunction = options.decodeFunction;
-    this.callbackFunction = options.callbackFunction;
 
     // open a connection with that device
     await this.port.open({
@@ -119,14 +109,12 @@ export class SignaturePadDriver extends BaseDriver {
     };
     this.reading = read();
 
-    // reset bytes array after 0.05s, this will clear corrupted data
-    // sometimes when reconnecting to the device some old bytes were stuck in the buffer
+    // reset bytes array after 0.05s, it clear any old bytes were stuck in the buffer
     setTimeout(() => {
       this.bytesArray = [];
+      this.callbackFunction = options.callbackFunction;
     }, 50);
   };
-
-  
 
   /**
    * function is called when new data come from device

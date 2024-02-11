@@ -88,6 +88,13 @@ export const signaturePadView = (function () {
     document.getElementById(disconnectButtonId).innerHTML = innerHtml;
   }
 
+  /**
+   * download a part of the canvas as image, parameters are the boundries of the area to be downloaded
+   * @param {number} xStart 
+   * @param {number} yStart 
+   * @param {number} xEnd 
+   * @param {number} yEnd 
+   */
   function downloadImage(xStart, yStart, xEnd, yEnd) {
     let canvas = document.getElementById(canvasId);
     // make new canvas
@@ -126,6 +133,14 @@ export const signaturePadView = (function () {
     context.clearRect(0, 0, canvas.width, canvas.height);
   }
 
+  /**
+   * draw a line on the canvas
+   * @param {number} lineWidth 
+   * @param {number} x 
+   * @param {number} y 
+   * @param {number} x2 
+   * @param {number} y2 
+   */
   function canvasDrawLine(lineWidth, x, y, x2, y2) {
     let c = document.getElementById(canvasId);
     let ctx = c.getContext("2d");

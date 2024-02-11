@@ -8,8 +8,8 @@ const urlsToCache = [
   "/controllers/base-controller.js",
   "/controllers/main-controller.js",
   "/drivers/base-driver.js",
+  "/drivers/signature-pad-driver.js",
   "/signature-pad/controller.js",
-  "/signature-pad/driver.js",
   "/signature-pad/view.js",
   "/signature-pad/templates/main.html",
   "/signature-pad/config-list.js",
@@ -19,7 +19,6 @@ const urlsToCache = [
   "/manifest.json",
   "/service-worker.js",
   "/topaz-display/controller.js",
-  "/topaz-display/driver.js",
   "/topaz-display/view.js",
 ];
 
