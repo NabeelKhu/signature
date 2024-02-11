@@ -98,6 +98,7 @@ export class SignaturePadController extends BaseController {
       signaturePadView.enableConnectButton();
       return;
     }
+    signaturePadView.setConnectButtonInner(connectInner);
     signaturePadView.enableDisconnectButton();
   };
 
