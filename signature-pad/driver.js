@@ -140,13 +140,9 @@ export class SignaturePadDriver extends BaseDriver {
       drawLine = true;
 
     while (this.bytesArray.length >= this.chunkSize) {
-      if(isFirst){
-        isFirst = false;
-        drawLine = true;
-      }
       console.log("process Counter", this.processCounter);
-      while (this.bytesArray.length > 0 && this.bytesArray[0] != 193) {
-        if (this.bytesArray[0] == 192) {
+      while (this.bytesArray.length > 0 && this.bytesArray[0] !== 193) {
+        if (this.bytesArray[0] === 192) {
           this.bytesArray.splice(0, 5);
           drawLine = false;
           continue;
@@ -182,6 +178,7 @@ export class SignaturePadDriver extends BaseDriver {
       } else this.callbackFunction(x, y, x, y);
       this.lastX = x;
       this.lastY = y;
+    
     }
     if (this.lastX !== null && this.lastY !== null)
       this.lastCallTime = timeCalled;
