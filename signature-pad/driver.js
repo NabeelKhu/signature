@@ -1,5 +1,7 @@
 import { BaseDriver } from "../drivers/base-driver.js";
+const { SerialPort } = window.require("serialport");
 
+// import { SerialPort } from "serialport";
 export class SignaturePadDriver extends BaseDriver {
   constructor() {
     super();
@@ -41,11 +43,11 @@ export class SignaturePadDriver extends BaseDriver {
    */
   connect = async () => {
     // request the user to select a device (it will give permission to interact with the device)
-    this.port = await navigator.serial.requestPort();
+    // this.port = await window.navigator.serial.requestPort();
 
-    let vid = this.port.getInfo().usbVendorId;
-    let pid = this.port.getInfo().usbProductId;
-    return { vid: vid, pid: pid };
+    // let vid = this.port.getInfo().usbVendorId;
+    // let pid = this.port.getInfo().usbProductId;
+    return { vid: 0x0403, pid: 0x6001 };
   };
 
   /**
@@ -60,7 +62,7 @@ export class SignaturePadDriver extends BaseDriver {
     let _decodeFunction = (bytes) => {
       // bytes length is 5, first byte is 0xc1 when the pen in drawing on the pad, anything other than it will be invalid
       if (bytes[0] != 0xc1) return { x: null, y: null, invalid: true };
-  
+
       // 2ed and 3ed bytes are for x and 4th and 5th bytes are for y
       let x = 0;
       x += bytes[1];
@@ -87,37 +89,45 @@ export class SignaturePadDriver extends BaseDriver {
     this.callbackFunction = options.callbackFunction;
 
     // open a connection with that device
-    await this.port.open({
-      baudRate: this.baudRate,
-      parity: this.parity,
-      bufferSize: 16777216,
+    // await this.port.open({
+    //   baudRate: this.baudRate,
+    //   parity: this.parity,
+    //   bufferSize: 16777216,
+    // });
+
+    this.port = new SerialPort({
+      path: "/dev/ttyUSB0",
+      parity: "odd",
+      baudRate: 19200,
     });
 
     this.keepReading = true;
-
+    this.port.on("data", (data) => {
+      this.process(data, new Date().getTime());
+    });
     // read function, constantly read data (using await) until keepreading is false
-    let read = async () => {
-      this.reader = await this.port.readable.getReader();
-      while (this.port.readable && this.keepReading) {
-        try {
-          // reader will return done if reader.cancel() used and it will break the loop
-          while (true) {
-            const { value, done } = await this.reader.read();
-            if (done) {
-              break;
-            }
-            // call process and give data and the current time
-            this.process(value, new Date().getTime());
-          }
-        } catch (error) {
-          console.error(error);
-          break;
-        } finally {
-          await this.reader.releaseLock();
-        }
-      }
-    };
-    this.reading = read();
+    // let read = async () => {
+    //   this.reader = await this.port.readable.getReader();
+    //   while (this.port.readable && this.keepReading) {
+    //     try {
+    //       // reader will return done if reader.cancel() used and it will break the loop
+    //       while (true) {
+    //         const { value, done } = await this.reader.read();
+    //         if (done) {
+    //           break;
+    //         }
+    //         // call process and give data and the current time
+    //         this.process(value, new Date().getTime());
+    //       }
+    //     } catch (error) {
+    //       console.error(error);
+    //       break;
+    //     } finally {
+    //       await this.reader.releaseLock();
+    //     }
+    //   }
+    // };
+    // this.reading = read();
 
     // reset bytes array after 0.05s, this will clear corrupted data
     // sometimes when reconnecting to the device some old bytes were stuck in the buffer
@@ -125,8 +135,6 @@ export class SignaturePadDriver extends BaseDriver {
       this.bytesArray = [];
     }, 50);
   };
-
-  
 
   /**
    * function is called when new data come from device
@@ -139,6 +147,7 @@ export class SignaturePadDriver extends BaseDriver {
     // device send limited number of points/s wich is around 120 times/s
     // to fix having gaps between points when user draw a line constantly it check the last time user draw
     // if it was less than 30ms ago it connect that 2 points with a line
+    // let isFirst = true;
     let drawLine = false;
     if (this.lastCallTime != null && this.lastCallTime + 30 > timeCalled)
       drawLine = true;
@@ -147,6 +156,19 @@ export class SignaturePadDriver extends BaseDriver {
 
     // while the bytesArray have over 5 elements (chunk size is 5) it keep processing data in it
     while (this.bytesArray.length >= this.chunkSize) {
+      // if (!isFirst) drawLine = true;
+      // while (this.bytesArray.length > 0 && this.bytesArray[0] != 193) {
+      //   if (this.bytesArray[0] == 192) {
+      //     this.bytesArray.splice(0, 5);
+      //     drawLine = false;
+      //     continue;
+      //   }
+      //   this.bytesArray.splice(0, 1);
+      //   this.numberOfSkipps += 1;
+      //   drawLine = false;
+      // }
+      // this.numberOfPoints += 1;
+      // if (this.bytesArray.length < 5) continue;
       let decodedObj = null;
       decodedObj = this.decodeFunction(
         this.bytesArray.slice(0, this.chunkSize)
@@ -166,6 +188,10 @@ export class SignaturePadDriver extends BaseDriver {
       } else this.callbackFunction(x, y, x, y);
       this.lastX = x;
       this.lastY = y;
+      // if (isFirst) {
+      //   isFirst = false;
+      //   drawLine = true;
+      // }
     }
     if (this.lastX !== null && this.lastY !== null)
       this.lastCallTime = timeCalled;
@@ -177,8 +203,8 @@ export class SignaturePadDriver extends BaseDriver {
   disconnect = async () => {
     if (this.port != null) {
       this.keepReading = false;
-      this.reader.cancel();
-      await this.reading;
+      // this.reader.cancel();
+      // await this.reading;
       await this.port.close();
     }
   };

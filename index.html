@@ -6,12 +6,20 @@
       content="width=device-width, initial-scale=1.0"
       charset="UTF-8"
     />
-    <link rel="manifest" href="manifest.json" />
+    <!-- <link rel="manifest" href="manifest.json" /> -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'"
+    />
+    <meta
+      http-equiv="X-Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'"
+    />
     <link rel="shortcut icon" href="assets/favicon.png" type="image/x-icon" />
     <link rel="stylesheet" href="styles/shared-style.css" />
   </head>
   <body>
-    <script>
+    <!-- <script>
       if ("serviceWorker" in navigator) {
         navigator.serviceWorker
           .register("service-worker.js")
@@ -25,7 +33,7 @@
             console.error("Service Worker registration failed:", error);
           });
       }
-    </script>
+    </script> -->
     <div id="header-bar">
       <div class="dropdown" id="dropdown-div">
         <div class="dropdown-head">
